@@ -26,7 +26,7 @@ model:
     pretrained:
       enabled: true
       type: videomae_v2
-      path: /storage/ice1/6/2/schatiwala3/d4rt/checkpoints/videomae2_giant/vit_g_hybrid_pt_1200e_from_hf.pth
+      path: /storage/ice1/6/2/schatiwala3/d4rt/checkpoints/videomae2_giant/vit_g_hybrid_pt_1200e_opend4rt.pth
       strict: true
       must_succeed: true
   decoder:
