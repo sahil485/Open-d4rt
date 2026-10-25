@@ -16,6 +16,7 @@ from src.core.registry import Registry
 
 from .blendermvs_raw_dataset import BlendermvsRawConfig, BlendermvsRawDataset
 from .co3d_raw_dataset import Co3dRawConfig, Co3dRawDataset
+from .dycheck_raw_dataset import DycheckRawConfig, DycheckRawDataset
 from .dynamic_replica_raw_dataset import DynamicReplicaRawConfig, DynamicReplicaRawDataset
 from .kubric_full_robust_dataset import KubricFullRobustConfig, KubricFullRobustDataset
 from .kubric_full_robust_preprocess_dataset import (
@@ -137,6 +138,8 @@ def _normalize_dataset_type(dataset_type: str) -> str:
         "co3d": "co3d_raw",
         "co3dv2": "co3d_raw",
         "co3d_v2": "co3d_raw",
+        "dycheck": "dycheck_raw",
+        "dycheck_iphone": "dycheck_raw",
         "dynamic_replica": "dynamic_replica_raw",
         "dynamic-replica": "dynamic_replica_raw",
         "kubric_full": "kubric_full_robust",
@@ -548,6 +551,43 @@ def _build_scannetpp_packed(split: str, cfg: Any, manifest_paths: list[str] | No
             view_splits=view_splits or (0,),
             samples_per_scene=int(cfg.get_path("data.scannetpp.samples_per_scene", 20)),
             max_scenes=_optional_int(cfg.get_path("data.scannetpp.max_scenes", None)),
+            augment=augment_cfg,
+            bad_sample_registry_path=_bad_sample_registry_path(cfg),
+            max_sample_retries=_bad_sample_max_retries(cfg),
+        )
+    )
+
+
+@DATASET_REGISTRY.register("dycheck_raw")
+def _build_dycheck_raw(split: str, cfg: Any, manifest_paths: list[str] | None = None):
+    """DyCheck iPhone raw release (``data.dycheck.root/<scene>/{rgb,depth,camera,splits}``)."""
+    del manifest_paths
+    root = cfg.get_path("data.dycheck.root", None)
+    if root is None:
+        raise ValueError("data.dycheck.root is required")
+    augment_cfg = augment_cfg_from_train_config(cfg)
+    scenes_cfg = cfg.get_path("data.dycheck.scenes", None)
+    split_scenes = scenes_cfg.get(split) if isinstance(scenes_cfg, dict) else None
+    scenes = tuple(_to_str_list(split_scenes)) if split_scenes else None
+    exclude_cfg = cfg.get_path("data.dycheck.exclude_scenes", None)
+    split_exclude = exclude_cfg.get(split) if isinstance(exclude_cfg, dict) else exclude_cfg
+    exclude = tuple(_to_str_list(split_exclude)) if split_exclude else ()
+    return DycheckRawDataset(
+        DycheckRawConfig(
+            root=Path(str(root)),
+            clip_frames=_clip_frames(cfg),
+            image_size=_image_size(cfg),
+            queries_per_clip=_queries_per_clip(cfg),
+            hard_query_ratio=_hard_query_ratio(cfg),
+            prob_t_tgt_equals_t_cam=_prob_t_tgt_equals_t_cam(cfg),
+            **_query_timestep_delta_kwargs(cfg),
+            training=(split == "train"),
+            factor=int(cfg.get_path("data.dycheck.factor", 2)),
+            split_name=str(cfg.get_path("data.dycheck.split_name", "train")),
+            scenes=scenes,
+            exclude_scenes=exclude,
+            samples_per_scene=int(cfg.get_path("data.dycheck.samples_per_scene", 200)),
+            max_depth_m=float(cfg.get_path("data.dycheck.max_depth_m", 0.0)),
             augment=augment_cfg,
             bad_sample_registry_path=_bad_sample_registry_path(cfg),
             max_sample_retries=_bad_sample_max_retries(cfg),
