@@ -120,8 +120,10 @@ schedule:
   local_repro_override:
     enabled: false
 checkpoint:
-  save_every_steps: 500
-  step_save_every_steps: 500
+  save_every_steps: 500  # last.ckpt (resume point), overwritten in place
+  # milestone checkpoints step_XXXXXXX.ckpt are never pruned (keep_last_k is not implemented);
+  # each is ~14 GB (model + AdamW state), so keep them at 5k-step milestones for later evaluation
+  step_save_every_steps: 5000
   keep_last_k: 6
   keep_best_by: val_loss_total
   auto_eval_worldtrack_step:
