@@ -31,6 +31,7 @@ from .raw_augment import (
     augment_cfg_from_train_config,
 )
 from .scannet_raw_dataset import ScannetRawConfig, ScannetRawDataset
+from .scannetpp_packed_dataset import ScannetppPackedConfig, ScannetppPackedDataset
 from .seeding import configure_dataset_seeding, seed_dataloader_worker
 from .tartanair_raw_dataset import TartanairRawConfig, TartanairRawDataset
 from .virtual_kitti2_raw_dataset import VirtualKitti2RawConfig, VirtualKitti2RawDataset
@@ -514,6 +515,39 @@ def _build_scannet_raw(split: str, cfg: Any, manifest_paths: list[str] | None = 
             max_scenes=_optional_int(cfg.get_path("data.scannet.max_scenes", None)),
             training=(split == "train"),
             source=str(cfg.get_path("data.scannet.source", "auto")),
+            augment=augment_cfg,
+            bad_sample_registry_path=_bad_sample_registry_path(cfg),
+            max_sample_retries=_bad_sample_max_retries(cfg),
+        )
+    )
+
+
+@DATASET_REGISTRY.register("scannetpp_packed")
+def _build_scannetpp_packed(split: str, cfg: Any, manifest_paths: list[str] | None = None):
+    """ScanNet++ DSLR from spatial-rep-learning packed shards (``data.scannetpp.roots.<split>``)."""
+    del manifest_paths
+    roots = cfg.get_path("data.scannetpp.roots", {})
+    root = roots.get(split) if isinstance(roots, dict) else None
+    if root is None:
+        root = cfg.get_path("data.scannetpp.root", None)
+    if root is None:
+        raise ValueError(f"data.scannetpp.roots.{split} (or data.scannetpp.root) is required")
+    augment_cfg = augment_cfg_from_train_config(cfg)
+    view_splits = tuple(int(v) for v in _to_int_list(cfg.get_path("data.scannetpp.view_splits", [0])))
+    return ScannetppPackedDataset(
+        ScannetppPackedConfig(
+            root=Path(str(root)),
+            clip_frames=_clip_frames(cfg),
+            image_size=_image_size(cfg),
+            queries_per_clip=_queries_per_clip(cfg),
+            hard_query_ratio=_hard_query_ratio(cfg),
+            prob_t_tgt_equals_t_cam=_prob_t_tgt_equals_t_cam(cfg),
+            **_query_timestep_delta_kwargs(cfg),
+            training=(split == "train"),
+            device=str(cfg.get_path("data.scannetpp.device", "dslr")),
+            view_splits=view_splits or (0,),
+            samples_per_scene=int(cfg.get_path("data.scannetpp.samples_per_scene", 20)),
+            max_scenes=_optional_int(cfg.get_path("data.scannetpp.max_scenes", None)),
             augment=augment_cfg,
             bad_sample_registry_path=_bad_sample_registry_path(cfg),
             max_sample_retries=_bad_sample_max_retries(cfg),

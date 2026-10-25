@@ -1,0 +1,153 @@
+experiment:
+  name: d4rt_scannetpp_dslr
+  seed: 42
+  output_dir: /storage/ice1/6/2/schatiwala3/d4rt/runs/scannetpp_dslr
+runtime:
+  framework: pytorch_reimplementation_of_kauldron_protocol
+  mixed_precision: true
+  fail_on_non_finite: true
+  batch_size: 2
+  train_batch_size: 2
+  val_batch_size: 2
+  num_workers: 6
+  train_num_workers: 6
+  val_num_workers: 2
+  pin_memory: true
+  persistent_workers: true
+  prefetch_factor: 2
+  timeout: 600
+  data_parallel: false
+  train_prefetch_factor: 2
+  debug_slow_stage_seconds: 20
+data:
+  canonical_schema_doc: docs/data_schema.md
+  clip_frames: 32
+  image_size:
+  - 256
+  - 256
+  bad_sample_registry:
+    path: /storage/ice1/6/2/schatiwala3/d4rt/runs/bad_sample.json
+    max_retries: 64
+  train_dataset_type: scannetpp_packed
+  val_dataset_type: scannetpp_packed
+  scannetpp:
+    roots:
+      train: /storage/ice1/6/2/schatiwala3/scannetpp_dslr/train
+      val: /storage/ice1/6/2/schatiwala3/scannetpp_dslr/val
+    device: dslr
+    view_splits:
+    - 0
+    samples_per_scene: 20
+train_sampling:
+  queries_per_clip: 4096
+  hard_query_ratio: 0.2
+  hard_query_source: depth_and_motion_boundaries_sobel
+  timestep_sampling:
+    t_src: uniform
+    t_tgt: uniform
+    t_cam: uniform
+    prob_t_tgt_equals_t_cam: 0.4
+    t_src_tgt_delta_mode: static_local_global
+loss:
+  total: weighted_sum
+  xyz_3d:
+    enabled: true
+    type: l1
+    weight_lambda_3d: 1.0
+    normalize_by_mean_depth: true
+    value_transform: sign_x_log1p_abs_x
+  uv_2d:
+    enabled: true
+    type: l1
+    weight_lambda_2d: 0.1
+  visibility:
+    enabled: true
+    type: bce
+    weight_lambda_vis: 0.1
+  displacement:
+    enabled: true
+    type: l1
+    weight_lambda_disp: 0.1
+  normal:
+    enabled: true
+    type: cosine_similarity
+    weight_lambda_normal: 0.4
+  confidence:
+    enabled: true
+    mode: main_text
+    weight_lambda_conf: 0.2
+    confidence_penalty: -log(c)
+    confidence_weights_xyz_error: true
+    lconf_ablation:
+      enabled: false
+      type: exp_neg_abs_xyz_error_l1
+      weight_lambda_lconf: 0.2
+  apply_only_where_gt_available: true
+  reprojection_uv_from_xyz:
+    enabled: false
+optimizer:
+  type: adamw
+  weight_decay: 0.03
+  gradient_clip_l2_norm: 10.0
+  learning_rate:
+    schedule: cosine_decay
+    warmup_steps: 500
+    peak_lr: 4.0e-06
+    final_lr: 4.0e-07
+augmentation:
+  color_jitter:
+    enabled: false
+  color_drop:
+    enabled: false
+    probability: 0.0
+  gaussian_blur:
+    enabled: false
+    probability: 0.0
+  random_crop:
+    enabled: false
+    scale_min_max:
+    - 1.0
+    - 1.0
+    random_zoom_in_probability: 0.0
+  temporal_subsample:
+    enabled: true
+    stride_min: 1
+    stride_max: 3
+schedule:
+  total_steps: 30000
+  paper_reference_runtime: H200 8-GPU no-augmentation refinement for global median
+    alignment.
+  local_repro_override:
+    enabled: false
+checkpoint:
+  save_every_steps: 500
+  step_save_every_steps: 500
+  keep_last_k: 6
+  keep_best_by: val_loss_total
+  auto_eval_worldtrack_step:
+    enabled: false
+    num_frames: 64
+    script: scripts/eval_worldtrack/run_batch_eval_worldtrack_step_ckpts.sh
+    log_dir_name: eval_worldtrack_step_auto_logs
+    env:
+      GPUS: 4,5,6,7
+      MAX_PARALLEL: 4
+      PROCS_PER_GPU: 1
+logging:
+  log_every_steps: 20
+  validate_every_steps: 500
+  validate_max_batches_global: 32
+  validate_max_samples_global: 64
+  per_dataset_validation:
+    enabled: false
+    max_batches_global: 0
+    max_samples_global: 512
+  visualization:
+    enabled: true
+    train_every_steps: 500
+    on_validation: true
+    max_samples: 1
+    max_points: 128
+    max_lines: -1
+    include_3d: true
+    save_png: true

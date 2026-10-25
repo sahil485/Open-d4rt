@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
+import numpy as np
 import torch
 import torch.distributed as dist
 from torch.cuda.amp import GradScaler, autocast
@@ -199,6 +200,7 @@ class Trainer:
         logger: Any,
         run_metadata_path: Path | None = None,
         tb_writer: Any | None = None,
+        wandb_run: Any | None = None,
         rank: int = 0,
         world_size: int = 1,
     ) -> None:
@@ -213,6 +215,7 @@ class Trainer:
         self.logger = logger
         self.run_metadata_path = Path(run_metadata_path) if run_metadata_path is not None else None
         self.tb_writer = tb_writer
+        self.wandb_run = wandb_run
         self.rank = rank
         self.world_size = world_size
         self.distributed = world_size > 1
@@ -680,6 +683,13 @@ class Trainer:
         return {key: float(val.item()) for key, val in zip(keys, values)}
 
     def _tb_add_scalar(self, tag: str, value: Any, step: int) -> None:
+        if self.wandb_run is not None:
+            try:
+                v = value.item() if hasattr(value, "item") else value
+                if isinstance(v, (int, float)) and np.isfinite(v):
+                    self.wandb_run.log({tag: float(v)}, step=int(step))
+            except Exception:
+                pass
         if self.tb_writer is None:
             return
         try:
@@ -1152,3 +1162,8 @@ class Trainer:
         if self.tb_writer is not None:
             self.tb_writer.flush()
             self.tb_writer.close()
+        if self.wandb_run is not None:
+            try:
+                self.wandb_run.finish()
+            except Exception:
+                pass

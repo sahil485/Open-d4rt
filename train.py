@@ -87,6 +87,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--tb_log", action="store_true", help="Enable TensorBoard scalar logging.")
+    parser.add_argument("--wandb", action="store_true", help="Log scalars to Weights & Biases (rank 0; WANDB_PROJECT/WANDB_ENTITY/WANDB_API_KEY from env).")
     parser.add_argument("--override", action="append", default=[], help="Override config by key=value. Use prefix model./train.")
     return parser.parse_args()
 
@@ -556,6 +557,26 @@ def main() -> int:
         run_metadata_update["runtime"]["world_size"] = world_size
         run_metadata_path.write_text(json.dumps(run_metadata_update, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+    wandb_run = None
+    if args.wandb and rank == 0:
+        try:
+            import wandb
+
+            wandb_run = wandb.init(
+                project=os.environ.get("WANDB_PROJECT", "opend4rt"),
+                entity=os.environ.get("WANDB_ENTITY") or None,
+                name=os.environ.get("WANDB_NAME") or str(train_cfg.get_path("experiment.name", "d4rt")),
+                id=os.environ.get("WANDB_RUN_ID") or None,
+                resume="allow" if os.environ.get("WANDB_RUN_ID") else None,
+                dir=str(output_dir),
+                config={"model": model_cfg.to_dict() if hasattr(model_cfg, "to_dict") else None,
+                        "train": train_cfg.to_dict() if hasattr(train_cfg, "to_dict") else None,
+                        "world_size": world_size},
+            )
+            logger.info("wandb run: %s", getattr(wandb_run, "url", None))
+        except Exception as exc:  # never let logging kill training
+            logger.warning("wandb disabled: %s", exc)
+            wandb_run = None
     tb_writer = None
     if args.tb_log and rank == 0:
         try:
@@ -581,6 +602,7 @@ def main() -> int:
         logger=logger,
         run_metadata_path=run_metadata_path,
         tb_writer=tb_writer,
+        wandb_run=wandb_run,
         rank=rank,
         world_size=world_size,
     )
