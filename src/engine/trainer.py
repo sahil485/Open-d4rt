@@ -382,6 +382,16 @@ class Trainer:
     def _model_module(self) -> torch.nn.Module:
         return self.model.module if hasattr(self.model, "module") else self.model
 
+    def _model_only_payload(self) -> dict[str, Any]:
+        """Weights + step for evaluation snapshots (best / milestones): ~1/3 the size of a resumable checkpoint."""
+        return {
+            "model": self._model_module().state_dict(),
+            "global_step": self.global_step,
+            "best_metric_name": self.best_metric_name,
+            "best_metric_value": self.best_metric_value,
+            "train_config": self.train_cfg.to_dict() if hasattr(self.train_cfg, "to_dict") else dict(self.train_cfg),
+        }
+
     def _checkpoint_payload(self) -> dict[str, Any]:
         base_model = self._model_module()
         return {
@@ -507,7 +517,7 @@ class Trainer:
             self.save_last_checkpoint()
             if self.step_save_every > 0 and (self.global_step % self.step_save_every == 0):
                 step_ckpt = self.output_dir / "checkpoints" / f"step_{self.global_step:07d}.ckpt"
-                save_checkpoint(step_ckpt, self._checkpoint_payload())
+                save_checkpoint(step_ckpt, self._model_only_payload())
                 self._launch_worldtrack_step_eval(step_ckpt)
         if self.distributed:
             dist.barrier()
@@ -525,7 +535,7 @@ class Trainer:
         val_loss = _safe_float(metrics.get("val_loss_total"))
         if val_loss is not None:
             self.best_val = val_loss
-        save_checkpoint(self.output_dir / "checkpoints" / "best.ckpt", self._checkpoint_payload())
+        save_checkpoint(self.output_dir / "checkpoints" / "best.ckpt", self._model_only_payload())
         self.logger.info(
             "New best checkpoint: %s=%.6f mode=%s at step=%d",
             self.best_metric_name,
